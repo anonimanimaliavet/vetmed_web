@@ -1,0 +1,21 @@
+import { redirect } from "next/navigation";
+
+import { getDashboardContext } from "@/lib/auth/dashboard-access";
+
+export default async function AdminLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  const context = await getDashboardContext();
+
+  if (!context) {
+    redirect("/login");
+  }
+
+  if (context.role !== "ADMIN") {
+    redirect("/user");
+  }
+
+  return children;
+}

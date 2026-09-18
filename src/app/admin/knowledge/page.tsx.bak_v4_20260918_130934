@@ -1,0 +1,135 @@
+import Link from "next/link";
+import { auth } from "@/auth";
+import { db } from "@/lib/db";
+
+function sourceLabel(sourceType: string) {
+  const parts = String(sourceType || "").split(":");
+  if (parts[0] === "CLINICAL_CASE") {
+    if (parts[1] === "VETERINARY_DATA_ENTRY") return "Klinik vaka · Veri girişi";
+    if (parts[1] === "VETERINARIAN") return "Klinik vaka · Veteriner hekim";
+    if (parts[1] === "ADMIN") return "Klinik vaka · Yönetici";
+    return "Klinik vaka";
+  }
+  return sourceType || "Belirtilmemiş";
+}
+
+function statusLabel(status: string) {
+  if (status === "APPROVED") return "Onaylandı";
+  if (status === "REJECTED") return "Reddedildi";
+  return "Bekliyor";
+}
+
+export default async function AdminKnowledgePage() {
+  const session = await auth();
+
+  if (!session?.user) {
+    return (
+      <main className="min-h-screen bg-slate-50 px-5 py-10">
+        <div className="mx-auto max-w-5xl rounded-[28px] border border-slate-200 bg-white p-10 shadow-sm">
+          <h1 className="text-2xl font-bold text-slate-950">Klinik Bilgi Havuzu</h1>
+          <p className="mt-2 text-slate-600">Yönetici oturumu bulunamadı.</p>
+          <Link href="/login" className="mt-6 inline-flex rounded-xl bg-sky-600 px-5 py-3 font-semibold text-white">
+            Giriş yap
+          </Link>
+        </div>
+      </main>
+    );
+  }
+
+  if (session.user.role !== "ADMIN") {
+    return (
+      <main className="min-h-screen bg-slate-50 px-5 py-10">
+        <div className="mx-auto max-w-5xl rounded-[28px] border border-slate-200 bg-white p-10 shadow-sm">
+          <h1 className="text-2xl font-bold text-slate-950">Yetkisiz erişim</h1>
+          <p className="mt-2 text-slate-600">Bu alan yalnızca yöneticilere açıktır.</p>
+          <Link href="/user" className="mt-6 inline-flex rounded-xl bg-sky-600 px-5 py-3 font-semibold text-white">
+            Panele dön
+          </Link>
+        </div>
+      </main>
+    );
+  }
+
+  const knowledge = await db.orm.public.CaseKnowledgeRecord.all();
+  const rows = [...knowledge].sort(
+    (a, b) =>
+      new Date(String(b.created_at)).getTime() -
+      new Date(String(a.created_at)).getTime()
+  );
+
+  return (
+    <main className="min-h-screen bg-slate-50 px-5 py-10">
+      <div className="mx-auto max-w-7xl space-y-7">
+        <Link href="/admin" className="inline-flex items-center text-sm font-semibold text-sky-700 hover:text-sky-900">
+          ← Yönetici paneli
+        </Link>
+
+        <section className="rounded-[28px] border border-slate-200 bg-white p-8 shadow-sm md:p-10">
+          <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+            <div>
+              <div className="text-sm font-medium text-sky-600">VetMed · Yönetim</div>
+              <h1 className="mt-2 text-3xl font-bold tracking-tight text-slate-950">Klinik Bilgi Havuzu</h1>
+              <p className="mt-2 max-w-3xl text-slate-500">
+                Klinik vakalardan gelen kayıtların tanısı, veri kaynağı ve doğrulama durumu.
+              </p>
+            </div>
+            <div className="rounded-2xl bg-slate-50 px-5 py-4 text-right">
+              <div className="text-xs font-medium tracking-wide text-slate-400">TOPLAM KAYIT</div>
+              <div className="mt-1 text-2xl font-bold text-slate-950">{rows.length}</div>
+            </div>
+          </div>
+        </section>
+
+        {rows.length === 0 ? (
+          <section className="rounded-[28px] border border-slate-200 bg-white p-10 text-center shadow-sm">
+            <h2 className="text-xl font-bold text-slate-900">Henüz bilgi kaydı yok</h2>
+            <p className="mt-2 text-slate-500">
+              Klinik vaka kayıtları bilgi havuzuna aktarıldığında burada görünecektir.
+            </p>
+          </section>
+        ) : (
+          <section className="overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-sm">
+            <div className="overflow-x-auto">
+              <table className="min-w-[1150px] w-full text-left">
+                <thead className="bg-slate-50">
+                  <tr className="border-b border-slate-200">
+                    <th className="px-6 py-4 text-xs font-semibold tracking-wide text-slate-500">TANI</th>
+                    <th className="px-6 py-4 text-xs font-semibold tracking-wide text-slate-500">TÜR</th>
+                    <th className="px-6 py-4 text-xs font-semibold tracking-wide text-slate-500">VERİ KAYNAĞI</th>
+                    <th className="px-6 py-4 text-xs font-semibold tracking-wide text-slate-500">DURUM</th>
+                    <th className="px-6 py-4 text-xs font-semibold tracking-wide text-slate-500">VAKA ID</th>
+                    <th className="px-6 py-4 text-xs font-semibold tracking-wide text-slate-500">TARİH</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {rows.map((record) => (
+                    <tr key={String(record.id)} className="border-b border-slate-100 last:border-0">
+                      <td className="px-6 py-5">
+                        <div className="font-semibold text-slate-900">{record.diagnosis_name}</div>
+                        <div className="mt-1 text-xs text-slate-400">Kayıt: {String(record.id).slice(0, 8)}…</div>
+                      </td>
+                      <td className="px-6 py-5 text-sm text-slate-700">{record.species}</td>
+                      <td className="px-6 py-5">
+                        <div className="font-medium text-slate-900">{sourceLabel(record.source_type)}</div>
+                        <div className="mt-1 text-xs text-slate-400">{record.source_type}</div>
+                      </td>
+                      <td className="px-6 py-5">
+                        <span className="inline-flex rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">
+                          {statusLabel(record.review_status)}
+                        </span>
+                      </td>
+                      <td className="px-6 py-5 font-mono text-xs text-slate-500">{String(record.case_id).slice(0, 12)}…</td>
+                      <td className="px-6 py-5 text-sm text-slate-500">
+                        {new Date(String(record.created_at)).toLocaleString("tr-TR")}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </section>
+        )}
+      </div>
+    </main>
+  );
+}
